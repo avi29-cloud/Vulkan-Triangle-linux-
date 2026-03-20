@@ -6,8 +6,22 @@
 #include<vector>
 #include<cstring>
 
+VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkallocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger){
+    auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
 
-
+    if (func != nullptr){
+        return func(instance, pCreateInfo,pAllocator, pDebugMessenger);
+    }
+    else{
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+}
+void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger, const VkAllocationCallbacks* pAllocator ){
+    auto func =(PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProAddr(instance,"vkDestroyDebugUtilsMessengerEXT");
+    if (func != nullptr){
+        func(instance, debugMessenger, pAllocator);
+    }
+}
 class HelloTriangleApplication {
     public:
     const uint32_t WIDTH =800;
@@ -31,6 +45,7 @@ class HelloTriangleApplication {
     private:
      GLFWwindow*window;
      VkInstance instance;
+      VkDebugUtilsMessengerEXT debugMessenger;
     void initWindow(){
         if (!glfwInit()) {
             throw std::runtime_error("Failed to initialize GLFW!");}
@@ -46,7 +61,28 @@ class HelloTriangleApplication {
     }
     void initVulkan(){
         createInstance();
+        setupDebugMessenger();
 
+    }
+    void setupDebugMessenger(){
+        if(!enableValidationLayers)  return;
+       VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+       createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+       createInfo.messageSeverity=VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+                                   VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                                   VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+                                   //tells vulkan which severity we want to hear about
+     createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+                              VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                              VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+                                  //this tells vulkan what type of message we want
+
+      createInfo.pfnUserCallback = debugCallback;
+      create.pUserData = nullptr;                            
+
+      if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugMessenger)!= VK_SUCCESS){
+        throw std::runtime_error("failed to set up debug messenger!");
+      }
     }
     void mainloop(){
         while (!glfwWindowShouldClose(window)){
@@ -143,12 +179,15 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
             std::runtime_error("failed to create Instance! ");
 
         }
-
+      
        
 
     }
 
     void cleanup(){
+        if (enableValidationLayers){
+            DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
+        }
         vkDestroyInstance(instance, nullptr);
 
         glfwDestroyWindow(window);
