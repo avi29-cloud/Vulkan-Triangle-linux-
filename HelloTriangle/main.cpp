@@ -6,6 +6,7 @@
 #include<vector>
 #include<cstring>
 #include<map>
+#include<optional>
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger){
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -48,6 +49,14 @@ class HelloTriangleApplication {
      VkInstance instance;
       VkDebugUtilsMessengerEXT debugMessenger;
       VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+      VkDevice device;
+      VkQueue graphicsQueue;
+     struct QueueFamilyIndices{
+        std::optional<uint32_t> graphicsFamily;
+        bool isComplete(){
+            return graphicsFamily.has_value();
+        }
+     };
     void initWindow(){
         if (!glfwInit()) {
             throw std::runtime_error("Failed to initialize GLFW!");}
@@ -65,6 +74,7 @@ class HelloTriangleApplication {
         createInstance();
         setupDebugMessenger();
         pickPhysicalDevice();
+        createLogicalDevice();
 
     }
    /* void pickPhysicalDevice(){
@@ -139,10 +149,65 @@ class HelloTriangleApplication {
         throw std::runtime_error("failed to find a suitable GPU!");
     }
  }
+
+ QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device){
+    QueueFamilyIndices indices;
+    uint32_t queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount,nullptr);
+    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount,queueFamilies.data());
+
+    int i = 0;
+    for(const auto& queueFamily : queueFamilies){
+        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT){
+            indices.graphicsFamily =i;
+        }
+        if (indices.isComplete()){
+            break;
+        }
+        i++;
+    }
+    return indices;
+ }
  bool isDeviceSuitable(VkPhysicalDevice device){
-    return true; // this because right now any gpu is fine
+        QueueFamilyIndices indices = findQueueFamilies(device);
+    
+    return indices.isComplete(); // this because right now any gpu is fine
     //the tutorial was teaching the ways for gpu selection for AAA games which I commented out
  }
+
+ void createLogicalDevice(){
+    QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+   VkDeviceQueueCreateInfo queueCreateInfo{};//Describe the number of queues we want
+   queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+   queueCreateInfo.queueFamilyIndex = indices.graphicsFamily.value();
+   queueCreateInfo.queueCount =1;
+
+   float queuePriority =1.0f;//assign priorities to the queues
+   queueCreateInfo.pQueuePriorities = & queuePriority;
+
+   VkPhysicalDeviceFeatures deviceFeatures{};
+   VkDeviceCreateInfo createInfo{};
+   createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+   createInfo.pQueueCreateInfos = &queueCreateInfo;
+   createInfo.queueCreateInfoCount =1;
+   createInfo.pEnabledFeatures = &deviceFeatures;
+  
+   if (enableValidationLayers){
+    createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+    createInfo.ppEnabledLayerNames = validationLayers.data();
+   }
+   else{
+    createInfo.enabledLayerCount=0;
+   }
+
+   createInfo.enabledExtensionCount =0;
+
+   if (vkCreateDevice(physicalDevice,&createInfo, nullptr,&device)!=VK_SUCCESS){
+    throw std:: runtime_error("failed to create logical device!");
+   }
+   vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
+}
     void setupDebugMessenger(){
      if(!enableValidationLayers)  return;
        VkDebugUtilsMessengerCreateInfoEXT createInfo;
@@ -211,7 +276,12 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     createInfo.pUserData = nullptr;                                                        
  }
     
-    void createInstance(){
+ /*uint32_t findQueueFamilies(VkPhysicialDevice device){
+ //Logic to find graphics queue family
+ }*/ //was just a placeholder
+
+
+void createInstance(){
 
         if (enableValidationLayers && !checkValidationLayerSupport()){
             throw std::runtime_error("validation layers requested, but not availablr");
@@ -268,6 +338,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     }
 
     void cleanup(){
+
+        vkDestroyDevice(device, nullptr);
         if (enableValidationLayers){
             DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
         }
