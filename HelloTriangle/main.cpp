@@ -9,6 +9,9 @@
 #include<optional>
 #include<set>
 #include<string>
+#include<algorithm>
+#include<limits>
+#include<cstdint>
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger){
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -59,6 +62,10 @@ class HelloTriangleApplication {
       VkDevice device;
       VkQueue graphicsQueue;
       VkQueue presentQueue;
+      VkSwapchainKHR swapChain;
+      std::vector<VkImage> swapChainImages;
+      VkFormat swapChainImageFormat;
+      VkExtent2D swapChainExtent;
      struct QueueFamilyIndices{
         std::optional<uint32_t> graphicsFamily;
         std::optional<uint32_t> presentFamily;
@@ -90,6 +97,7 @@ class HelloTriangleApplication {
         createSurface();
         pickPhysicalDevice();
         createLogicalDevice();
+        createSwapChain();
 
     }
    /* void pickPhysicalDevice(){
@@ -233,6 +241,42 @@ class HelloTriangleApplication {
     }
     return details;
  }
+  VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats){
+    for (const auto& availableFormat : availableFormats){
+
+        if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR){
+            return availableFormat;
+        }
+    }
+        return availableFormats[0];//if we can't find our favourite , just settle for the first one 
+    
+  }
+  VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> & availablePresentModes){
+    for (const auto& availablePresentMode: availablePresentModes){
+        if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR){
+            return availablePresentMode;
+        }
+    }
+        return VK_PRESENT_MODE_FIFO_KHR;//if mailbox isn't available(this is standard V-sync)
+}
+  VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities){
+    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()){
+        return capabilities.currentExtent;// the gpu requires us to use exactly this resolution
+    }
+    else{
+        int width, height;// the Gpu says pick whatever you want within these min/max limits
+        glfwGetFramebufferSize(window,&width,&height);
+
+        VkExtent2D actualExtent ={
+            static_cast<uint32_t>(width),
+            static_cast<uint32_t>(height)
+        };
+        actualExtent.width =std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+        actualExtent.height =std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+        return actualExtent;
+    }
+  }
  bool isDeviceSuitable(VkPhysicalDevice device){
         QueueFamilyIndices indices = findQueueFamilies(device);;
          bool extensionsSupported = checkDeviceExtensionSupport(device);
@@ -284,17 +328,68 @@ class HelloTriangleApplication {
     createInfo.ppEnabledLayerNames = validationLayers.data();
    }
    else{
-    createInfo.enabledLayerCount= static_cast<uint32_t>(deviceExtensions.size());
-    createInfo.ppEnabledExtensionNames = deviceExtensions.data();
+    createInfo.enabledExtensionCount =0;
    }
-
-   createInfo.enabledExtensionCount =0;
-
+ createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
+ createInfo.ppEnabledExtensionNames = deviceExtensions.data();
    if (vkCreateDevice(physicalDevice,&createInfo, nullptr,&device)!=VK_SUCCESS){
     throw std:: runtime_error("failed to create logical device!");
    }
    vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
    vkGetDeviceQueue(device,indices.presentFamily.value(),0,&presentQueue);
+}
+
+void createSwapChain(){
+    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
+
+    VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
+    VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+    VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+
+    uint32_t imageCount =swapChainSupport.capabilities.minImageCount +1;// how many images should we keep in swap chain
+    if (swapChainSupport.capabilities.maxImageCount>0 && imageCount > swapChainSupport.capabilities.maxImageCount){
+        imageCount = swapChainSupport.capabilities.maxImageCount;
+    }
+    VkSwapchainCreateInfoKHR createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    createInfo.surface = surface;
+
+    createInfo.minImageCount = imageCount;
+    createInfo.imageFormat = surfaceFormat.format;
+    createInfo.imageColorSpace = surfaceFormat.colorSpace;
+    createInfo.imageExtent = extent;
+    createInfo.imageArrayLayers =1;
+    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;//drawing directly to these images
+
+    QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+    uint32_t QueueFamilyIndices[] = {indices.graphicsFamily.value(),indices.presentFamily.value()};
+
+    if (indices.graphicsFamily != indices.presentFamily){    //if both are different queues ,we need to share images between them
+        createInfo.imageSharingMode= VK_SHARING_MODE_CONCURRENT;
+        createInfo.queueFamilyIndexCount =2;
+        createInfo.pQueueFamilyIndices = QueueFamilyIndices;
+   
+    }
+    else{
+        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    }
+    createInfo.preTransform = swapChainSupport.capabilities.currentTransform;//dont rotate the screen
+    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; //ignore the alpha channels(no transparent)
+    createInfo.presentMode = presentMode;
+    createInfo.clipped =VK_TRUE; //Clip pixels that are hidden behind other windows
+    createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+    if (vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain)!=VK_SUCCESS){
+        throw std::runtime_error("Failed to create Swap Chain");
+    }
+
+    vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);//retieve the handles to the actual images craeted for us by vulkam
+    swapChainImages.resize(imageCount);
+    vkGetSwapchainImagesKHR(device,swapChain, &imageCount, swapChainImages.data());
+ 
+    swapChainImageFormat = surfaceFormat.format;
+    swapChainExtent = extent;
+
 }
     void setupDebugMessenger(){
      if(!enableValidationLayers)  return;
@@ -427,6 +522,7 @@ void createInstance(){
 
     void cleanup(){
 
+        vkDestroySwapchainKHR(device, swapChain, nullptr);
         vkDestroyDevice(device, nullptr);
         if (enableValidationLayers){
             DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
