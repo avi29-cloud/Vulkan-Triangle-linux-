@@ -68,6 +68,8 @@ class HelloTriangleApplication {
       VkFormat swapChainImageFormat;
       VkExtent2D swapChainExtent;
       std::vector<VkImageView> swapChainImageViews;
+      VkPipelineLayout pipelineLayout; 
+
      struct QueueFamilyIndices{
         std::optional<uint32_t> graphicsFamily;
         std::optional<uint32_t> presentFamily;
@@ -525,6 +527,46 @@ void createGraphicsPipeline(){
     viewportState.scissorCount =1;
     viewportState.pScissors = &scissor;
 
+    //Rasterizer(turns geometry into physical pixels)
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType =VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.depthClampEnable= VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL; //draw solid triangles
+    rasterizer.lineWidth =1.0f;
+    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT; //hides the back of the triangle
+    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer.depthBiasEnable = VK_FALSE;
+
+    //Multisampling (Anti-Aliasing - smoothing out jagged edges)
+    // we will disable this for now
+
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    //Color blending 
+    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+    colorBlendAttachment.colorWriteMask= VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachment.blendEnable = VK_FALSE; //no transparency yet
+
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.sType=VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.logicOpEnable = VK_FALSE;
+    colorBlending.attachmentCount =1;
+    colorBlending.pAttachments = &colorBlendAttachment;
+
+   //Pipeline Layout (for passing global variable to the shaders later)
+   VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+   pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+   pipelineLayoutInfo.setLayoutCount = 0;
+   pipelineLayoutInfo.pushConstantRangeCount = 0;
+
+
+   if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr , &pipelineLayout)!= VK_SUCCESS){
+    throw std::runtime_error("failed to create pipeline layout!");
+   }
     vkDestroyShaderModule(device, fragShaderModule, nullptr);
     vkDestroyShaderModule(device, vertShaderModule, nullptr);
 
@@ -664,7 +706,7 @@ void createInstance(){
         for(auto imageView : swapChainImageViews){
             vkDestroyImageView(device, imageView, nullptr);
         }
-
+        vkDestroyPipelineLayout(device , pipelineLayout, nullptr);
         vkDestroySwapchainKHR(device, swapChain, nullptr);
         vkDestroyDevice(device, nullptr);
         if (enableValidationLayers){
