@@ -725,12 +725,12 @@ uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties){
     vkGetPhysicalDeviceMemoryProperties(physicalDevice , &memProperties);
 
     for (uint32_t i = 0 ; i <memProperties.memoryTypeCount; i++){
-        if((typeFilter & (1 << i )) && (memProperties.memoryTypes[i].propertyFlags) & properties){
+        if((typeFilter & (1 << i )) && (memProperties.memoryTypes[i].propertyFlags & properties)== properties){
             return i;
         }
     }
     throw std::runtime_error("failed to find suitable memory type ");
-
+}
 void createVertexBuffer(){
     VkDeviceSize bufferSize = sizeof(vertices[0])* vertices.size();
     VkBufferCreateInfo bufferInfo{};
@@ -748,7 +748,7 @@ void createVertexBuffer(){
 
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    alloc.allocationSize = memRequirements.size;
+    allocInfo.allocationSize = memRequirements.size;
     allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
     if(vkAllocateMemory(device, &allocInfo, nullptr , &vertexBufferMemory)!= VK_SUCCESS){
@@ -763,7 +763,7 @@ void createVertexBuffer(){
       memcpy(data, vertices.data(),(size_t)bufferSize);
     vkUnmapMemory(device,vertexBufferMemory);  
 }    
-}
+
  void createCommandPool(){
     QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
 
@@ -818,11 +818,11 @@ void createVertexBuffer(){
     //this is a command being written to the buffer , not executed immediately
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    //Bind our Graphics Pipeline
+    //Bind Graphics Pipeline
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS , graphicsPipeline);
 
     VkBuffer vertexBuffers[] = {vertexBuffer};
-    VkDeviceSize offset[] = {0};
+    VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(commandBuffer, 0 , 1 , vertexBuffers, offsets);
     //Dynamic States
     VkViewport viewport{};
@@ -951,6 +951,7 @@ void createVertexBuffer(){
     }
     return true;
 }
+
 
 std::vector<const char*> getRequiredExtensions(){
     uint32_t glfwExtensionCount =0;
@@ -1092,4 +1093,4 @@ int main(){
     return EXIT_FAILURE;
  }
  return EXIT_SUCCESS;
-}
+};
