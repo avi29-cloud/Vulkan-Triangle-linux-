@@ -65,9 +65,9 @@ struct Vertex{
 };
 
 const std::vector<Vertex> vertices ={
-    {{0.0f, -0.5f},{0.0f,1.0f, 1.0f}},//top corner
-    {{0.5f,0.5f},{0.0f,1.0f,0.3f}},//bottom right
-    {{-0.5f,0.5f},{0.0f,0.2f,1.0f}}//bottom left
+    {{0.0f, -0.5f},{1.0f,1.0f, 1.0f}},//top corner
+    {{0.5f,0.5f},{0.0f,1.0f,0.0f}},//bottom right
+    {{-0.5f,0.5f},{0.0f,0.0f,1.0f}}//bottom left
 };
 class HelloTriangleApplication {
     public:
@@ -189,8 +189,8 @@ class HelloTriangleApplication {
         createRenderPass();
         createGraphicsPipeline();
         createFramebuffers();
-        createVertexBuffer();
         createCommandPool();
+        createVertexBuffer();
         createCommandBuffer();
         createSyncObjects();
 
@@ -731,9 +731,72 @@ uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties){
     }
     throw std::runtime_error("failed to find suitable memory type ");
 }
-void createVertexBuffer(){
-    VkDeviceSize bufferSize = sizeof(vertices[0])* vertices.size();
+
+ // helper function 1 : builds any kind of buffer we ask for
+ void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage , VkMemoryPropertyFlags properties , VkBuffer& buffer , VkDeviceMemory& bufferMemory){
     VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (vkCreateBuffer(device , &bufferInfo , nullptr , &buffer)!= VK_SUCCESS){
+        throw std::runtime_error("failed to create buffer!");
+
+    }
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(device , buffer , &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+    if (vkAllocateMemory(device, &allocInfo , nullptr, &bufferMemory)!=VK_SUCCESS){
+        throw std::runtime_error("failed to allocate Buffer memory");
+    }
+    vkBindBufferMemory(device , buffer , bufferMemory , 0);
+
+ }
+
+ //Helper function 2 : Instructs GPU to copy data from one buffer to other
+ 
+ void copyBuffer(VkBuffer srcBuffer , VkBuffer dstBuffer , VkDeviceSize size){
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandPool = commandPool;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer commandBuffer;
+    vkAllocateCommandBuffers(device , &allocInfo , &commandBuffer);
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(commandBuffer , &beginInfo);
+
+    VkBufferCopy copyRegion {};
+    copyRegion.size = size;
+    vkCmdCopyBuffer(commandBuffer , srcBuffer , dstBuffer, 1, &copyRegion);
+
+    vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    vkQueueSubmit(graphicsQueue , 1 , &submitInfo , VK_NULL_HANDLE);
+    vkQueueWaitIdle(graphicsQueue);
+
+    vkFreeCommandBuffers(device , commandPool , 1 , &commandBuffer);
+
+ }
+void createVertexBuffer(){
+ 
+    VkDeviceSize bufferSize = sizeof(vertices[0])* vertices.size();
+    /*VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.size = bufferSize;
     bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
@@ -761,7 +824,33 @@ void createVertexBuffer(){
     void* data;
     vkMapMemory(device , vertexBufferMemory , 0, bufferSize , 0,&data);
       memcpy(data, vertices.data(),(size_t)bufferSize);
-    vkUnmapMemory(device,vertexBufferMemory);  
+    vkUnmapMemory(device,vertexBufferMemory);  */
+
+// now we have other tools so we dont need this
+
+VkBuffer stagingBuffer;
+VkDeviceMemory stagingBufferMemory;
+
+//slow staging buffer that cpu can write to
+createBuffer(bufferSize , VK_BUFFER_USAGE_TRANSFER_SRC_BIT,VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+// map and copy our array into staging buffer
+void* data;
+vkMapMemory(device , stagingBufferMemory , 0 , bufferSize , 0 , &data);
+ memcpy(data, vertices.data(), (size_t)bufferSize);
+vkUnmapMemory(device , stagingBufferMemory);
+
+//gpu only memory buffer
+createBuffer(bufferSize , VK_BUFFER_USAGE_TRANSFER_DST_BIT |VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer , vertexBufferMemory);
+
+//  command gpu to copy from staging to fast memory
+
+copyBuffer(stagingBuffer , vertexBuffer , bufferSize);
+
+// Destroy the temporary staging buffer
+
+vkDestroyBuffer(device , stagingBuffer , nullptr);
+vkFreeMemory(device , stagingBufferMemory , nullptr);
 }    
 
  void createCommandPool(){
