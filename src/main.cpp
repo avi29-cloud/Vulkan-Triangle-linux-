@@ -216,6 +216,9 @@ class Application {
         createCommandPool();
         createVertexBuffer();
         createIndexBuffer();
+        createUniformBuffers();
+        createDescriptorPool();
+        createDescriptorSets();
         createCommandBuffer();
         createSyncObjects();
 
@@ -672,8 +675,8 @@ void createGraphicsPipeline(){
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL; //draw solid triangles
     rasterizer.lineWidth =1.0f;
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT; //hides the back of the triangle
-    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer.cullMode = VK_CULL_MODE_NONE; //hides the back of the triangle
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
 
     //Multisampling (Anti-Aliasing - smoothing out jagged edges)
@@ -921,6 +924,9 @@ void createIndexBuffer(){
 
 void createUniformBuffers(){
     VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+    uniformBuffers.resize(swapChainImages.size());
+
     uniformBuffersMemory.resize(swapChainImages.size());
     uniformBuffersMapped.resize(swapChainImages.size()); 
 
@@ -960,7 +966,6 @@ void createDescriptorSets(){
         throw std::runtime_error("failed to allocate descriptor sets!");
     }
 
-    uniformBuffers.resize(swapChainImages.size());
 
     for(size_t i = 0; i< swapChainImages.size(); i++){
         VkDescriptorBufferInfo bufferInfo{};
@@ -979,6 +984,31 @@ void createDescriptorSets(){
 
         vkUpdateDescriptorSets(device , 1 , &descriptorWrite , 0 , nullptr);
     }
+}
+
+void updateUniformBuffer(uint32_t currentImage){
+    static auto startTime = std::chrono::high_resolution_clock::now();
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float , std::chrono::seconds::period>(currentTime - startTime).count();
+
+    UniformBufferObject ubo{};
+    //model : spin it around Z axis
+    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f),glm::vec3(0.0f,0.0f,1.0f));
+
+   //view :camera looking from x:2 , y:2, z:2 down towards the center(0,0,0)
+
+   ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f,0.0f,0.f) , glm::vec3(0.0f,0.0f,1.0f));
+
+   //projection 45 degree field of view
+
+   ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width /(float)swapChainExtent.height , 0.1f,10.0f);
+
+   //vulkan quirk: flip the y axis
+
+   ubo.proj[1][1] *= -1;
+
+//copying the math into gpu memory
+   memcpy(uniformBuffersMapped[currentImage] , &ubo , sizeof(ubo));
 }
 
  void createCommandPool(){
@@ -1043,6 +1073,9 @@ void createDescriptorSets(){
     vkCmdBindVertexBuffers(commandBuffer, 0 , 1 , vertexBuffers, offsets);
     
     vkCmdBindIndexBuffer(commandBuffer, indexBuffer , 0 , VK_INDEX_TYPE_UINT16);
+    
+    vkCmdBindDescriptorSets(commandBuffer , VK_PIPELINE_BIND_POINT_GRAPHICS , pipelineLayout , 0, 1 , &descriptorSets[imageIndex],0,nullptr);
+
     //Dynamic States
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -1062,6 +1095,7 @@ void createDescriptorSets(){
     vkCmdDrawIndexed(commandBuffer,static_cast<uint32_t>(indices.size()), 1,0,0,0);// drawing rectangle
 
     vkCmdEndRenderPass(commandBuffer);//finish render pass
+
 
     if (vkEndCommandBuffer(commandBuffer)!= VK_SUCCESS){
         throw std::runtime_error("failed to record command buffer");
@@ -1094,6 +1128,7 @@ void createDescriptorSets(){
     uint32_t imageIndex;
     vkAcquireNextImageKHR(device, swapChain , UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
 
+    updateUniformBuffer(imageIndex);
     //reset work order and record new commands
     vkResetCommandBuffer(commandBuffer, 0);
     recordCommandBuffer(commandBuffer, imageIndex);
@@ -1272,6 +1307,13 @@ void createInstance(){
         for (auto framebuffer : swapChainFramebuffers){
             vkDestroyFramebuffer(device, framebuffer, nullptr);
         }
+
+        for (size_t i = 0 ; i< swapChainImages.size(); i++){
+            vkDestroyBuffer(device , uniformBuffers[i] , nullptr);
+            vkFreeMemory(device , uniformBuffersMemory[i], nullptr);
+        }
+
+        vkDestroyDescriptorPool(device , descriptorPool , nullptr);
 
         vkDestroyCommandPool(device , commandPool , nullptr);
 
