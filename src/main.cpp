@@ -812,8 +812,51 @@ uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties){
 
  }
 
- //Helper function 2 : Instructs GPU to copy data from one buffer to other
- 
+ VkCommandBuffer beginSingleTimeCommand(){
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandPool = commandPool;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer commandBuffer;
+    vkAllocateCommandBuffers(device , &allocInfo , &commandBuffer);
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+    //this flag tellls vulkan we are only using this buffer once and then destroying it
+    
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(commandBuffer , &beginInfo);
+
+    return commandBuffer;
+ }
+
+ void endsingleTimeCommands(VkCommandBuffer commandBuffer){
+    //stop recording
+
+    vkEndCommandBuffer(commandBuffer);
+
+    //Preparing to send it to the gpu
+
+    VKSubmitInfo submitInfo{};
+    submitInfo.sType =VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount =1 ;
+    submitInfo.pCommandBufffers = &commandBuffer;
+
+    //send
+   vkQueueSubmit(graphicsQueue , 1 , &submitInfo , VK_NULL_HANDLE);
+
+   // wait for gpu to finish
+
+   vkQueueWaitIdle(graphicsQueue);
+
+   //clean up the temporary command bufffer (so memory doesn't leak)
+   vkFreeCommandBuffers(device , commandPool , 1 , &commandBuffer);
+ }
+ //Helper function 2 : Instructs GPU to copy data from one buffer to other 
  void copyBuffer(VkBuffer srcBuffer , VkBuffer dstBuffer , VkDeviceSize size){
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -847,6 +890,7 @@ uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties){
     vkFreeCommandBuffers(device , commandPool , 1 , &commandBuffer);
 
  }
+
 void createVertexBuffer(){
  
     VkDeviceSize bufferSize = sizeof(vertices[0])* vertices.size();
