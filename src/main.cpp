@@ -133,6 +133,8 @@ class Application {
       std::vector<VkDescriptorSet> descriptorSets; 
       VkImage textureImage;
       VkDeviceMemory textureImageMemory;
+      VkImageView textureImageView;
+      VkSampler textureSampler;
       VkRenderPass renderPass;
       VkPipeline graphicsPipeline;
       std::vector<VkFramebuffer> swapChainFramebuffers;
@@ -224,6 +226,8 @@ class Application {
         createDescriptorPool();
         createDescriptorSets();
         createTextureImage();
+        createTextureImageView();
+        createTextureSampler();
         createCommandBuffer();
         createSyncObjects();
 
@@ -522,6 +526,26 @@ void createSwapChain(){
 
 }
 
+VkImageView createImageView(VkImage image , VkFormat format){
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = format;
+
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount= 1;
+
+    VkImageView imageView;
+    if (vkCreateImageView(device , &viewInfo , nullptr , &imageView)!= VK_SUCCESS){
+        throw std::runtime_error(" failed to create texture Image view");
+    }
+     return imageView;
+
+}
 void createImageViews(){
     swapChainImageViews.resize(swapChainImages.size());
 
@@ -823,7 +847,7 @@ uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties){
     vkAllocateCommandBuffers(device , &allocInfo , &commandBuffer);
 
     VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
     //this flag tellls vulkan we are only using this buffer once and then destroying it
     
@@ -841,10 +865,10 @@ uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties){
 
     //Preparing to send it to the gpu
 
-    VKSubmitInfo submitInfo{};
+    VkSubmitInfo submitInfo{};
     submitInfo.sType =VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount =1 ;
-    submitInfo.pCommandBufffers = &commandBuffer;
+    submitInfo.pCommandBuffers = &commandBuffer;
 
     //send
    vkQueueSubmit(graphicsQueue , 1 , &submitInfo , VK_NULL_HANDLE);
@@ -1017,6 +1041,48 @@ void createTextureImage(){
     stbi_image_free(pixels); 
 }
 
+void createTextureImageView(){
+    textureImageView =createImageView(textureImage , VK_FORMAT_R8G8B8A8_SRGB);
+}
+
+void createTextureSampler(){  //Visual style of the texture 
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+
+    //handle zoom in(maginifying) and zoom out (minify)
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+
+    //handling texture wrapping(xyz axes are called uvw in textures)
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT; 
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT; 
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    
+    //Disable anistropic filtering
+
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    samplerInfo.maxAnisotropy = 1.0f;
+
+    //color to return if we choose"clamp to border" address mode
+
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+
+    //use standard Coordinate System
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+    samplerInfo.mipLodBias = 0.0f;
+    samplerInfo.minLod =0.0f;
+    samplerInfo.maxLod =0.0f;
+
+    if (vkCreateSampler(device , &samplerInfo , nullptr ,&textureSampler)!= VK_SUCCESS){
+        throw std:: runtime_error("failed to create texture sampler");
+    }
+}
 void createDescriptorPool(){
     VkDescriptorPoolSize poolSize{};
     poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1406,6 +1472,10 @@ void createInstance(){
         }
         vkDestroyBuffer(device, vertexBuffer , nullptr);
         vkDestroyBuffer(device, indexBuffer , nullptr);
+        vkDestroySampler(device ,textureSampler , nullptr);
+        vkDestroyImageView(device , textureImageView , nullptr);
+        vkDestroyImage(device , textureImage, nullptr);
+        vkFreeMemory(device , textureImageMemory , nullptr);
         vkFreeMemory(device , indexBufferMemory, nullptr);
         vkFreeMemory(device , vertexBufferMemory, nullptr);
         vkDestroyPipeline(device, graphicsPipeline,nullptr);
