@@ -949,6 +949,57 @@ uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties){
     }
    vkBindImageMemory (device ,image , imageMemory , 0);
  }
+
+ void transitionImageLayout(VkImage image , VkFormat format , VkImageLayout oldLayout , VkImageLayout , newLayout){
+    VkCommandBuffer commandBuffer = beginSingleTimeCommand();
+    VkImageMemoryBarrier barrier{};
+    barrierInfo.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrierInfo.oldLayout = oldLayout;
+    barrierInfo.newLayout = newLayout;
+    barrierInfo.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrierInfo.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrierInfo.image = image;
+
+    barrierInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrierInfo.subresourceRange.baseMipLevel=0;;
+    barrierInfo.subresourceRange.levelCount=1;
+    barrierInfo.subresourceRange.baseArrayLayer=0;
+    barrierInfo.subresourceRange.layerCount =1;
+
+    VkPipelineStageFlags = sourceStage;
+    VkPipelineStageFlags = destinationStage;
+
+    if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIONAL){
+        barrier.srcAcessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    }
+    else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIONAL && newLayout ==VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIONAL){
+         barrier.srcAcessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    }
+   else{
+     throw std::invalid_argument("Unsopported layout transitions");
+
+   }
+
+   VkCmdPipelineBarrier(
+    commandBuffer,
+    source stage , destinationStage,
+    0,
+    0, nullptr,
+    0, nullptr,
+    1, &barrier
+   );
+
+   endsingleTimeCommands(commandBuffer);
+
+ }
 void createVertexBuffer(){
  
     VkDeviceSize bufferSize = sizeof(vertices[0])* vertices.size();
