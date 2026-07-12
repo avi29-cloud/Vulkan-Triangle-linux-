@@ -184,6 +184,7 @@ class Application {
       VkImageView depthImageView;
       std::vector<Vertex> vertices;
       std::vector<uint32_t> indices; // upgraded from 16 to 32 because 3D
+      bool framebufferResized = false;
       VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
       VkImage colorImage;
       VkDeviceMemory colorImageMemory;
@@ -1919,7 +1920,42 @@ void createInstance(){
        
 
     }
+    void cleanSwapChain(){
+        vkDestroyImageView(device,colorImage,nullptr);
+        vkDestroyImage(device, colorImage,nullptr);
+        vkFreeMemory(device, colorImageMemory, nullptr);
 
+        vkDestroyImageView(device, depthImageView, nullptr);
+        vkDestroyImage(device,depthImage, nullptr);
+        vkFreeMemory(device, depthImageMemory, nullptr);
+
+        for (auto framebuffer : swapChainFramebuffers){
+            vkDestroyFramebuffer(device, framebuffer, nullptr);
+        }
+        for (auto imageView : swapChainImageViews){
+            vkDestroyImageView(device, imageView, nullptr);
+        }
+        vkDestroySwapchainKHR(device, swapChain, nullptr);
+    }
+
+    void recreateSwapChain(){
+        int width =0, height =0;
+        glfwGetFramebufferSize(window, &width , &height);
+
+        while(width == 0 || height ==0){
+            glfwGetFramebufferSize(window, &width , &height);
+            glfwWaitEvents();
+        }
+
+        vkDeviceWaitIdle(device);
+       cleanSwapChain();
+       
+       createSwapChain();
+       createImageViews();
+       createColorResources();
+       createDepthResources();
+       createFramebuffers();
+    }
 
     void cleanup(){
 
