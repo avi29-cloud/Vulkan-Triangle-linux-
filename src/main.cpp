@@ -1745,7 +1745,16 @@ void updateUniformBuffer(uint32_t currentImage){
 
     //ask swap chain for next available image
     uint32_t imageIndex;
-    vkAcquireNextImageKHR(device, swapChain , UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+    //vkAcquireNextImageKHR(device, swapChain , UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+    VkResult result = vkAcquireNextImageKHR(device,swapChain , UINT64_MAX,imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR){
+        recreateSwapChain();
+        return;
+    }
+    else if(result!= VK_SUCCESS && result != VK_SUBOPTIMAL_KHR){
+        throw std::runtime_error("failed to acquire swap chain image");
+    }
 
     updateUniformBuffer(imageIndex);
     //reset work order and record new commands
@@ -1786,7 +1795,16 @@ void updateUniformBuffer(uint32_t currentImage){
     presentInfo.pSwapchains = swapChains;
     presentInfo.pImageIndices = &imageIndex;
 
-    vkQueuePresentKHR(presentQueue, &presentInfo);
+   // vkQueuePresentKHR(presentQueue, &presentInfo);
+   result = vkQueuePresentKHR(presentQueue , &presentInfo);
+
+   if (result == VK_ERROR_OUT_OF_DATE_KHR || result ==VK_SUBOPTIMAL_KHR ||framebufferResized){
+    framebufferResized = false;
+    recreateSwapChain();
+   }
+   else if (result != VK_SUCCESS){
+    throw std::runtime_error("failed to present swap chain image");
+   }
 
  }
     void setupDebugMessenger(){
@@ -1921,7 +1939,7 @@ void createInstance(){
 
     }
     void cleanSwapChain(){
-        vkDestroyImageView(device,colorImage,nullptr);
+        vkDestroyImageView(device,colorImageView,nullptr);
         vkDestroyImage(device, colorImage,nullptr);
         vkFreeMemory(device, colorImageMemory, nullptr);
 
@@ -1959,9 +1977,10 @@ void createInstance(){
 
     void cleanup(){
 
-        for (auto framebuffer : swapChainFramebuffers){
+       /* for (auto framebuffer : swapChainFramebuffers){
             vkDestroyFramebuffer(device, framebuffer, nullptr);
-        }
+        }*/ //not needed
+        cleanSwapChain();
 
         for (size_t i = 0 ; i< swapChainImages.size(); i++){
             vkDestroyBuffer(device , uniformBuffers[i] , nullptr);
@@ -1976,9 +1995,9 @@ void createInstance(){
         vkDestroySemaphore(device, imageAvailableSemaphore, nullptr);
         vkDestroyFence(device , inFlightFence,nullptr);
         
-        for(auto imageView : swapChainImageViews){
+       /*for(auto imageView : swapChainImageViews){
             vkDestroyImageView(device, imageView, nullptr);
-        }
+        }*/ //not needed
         vkDestroyBuffer(device, vertexBuffer , nullptr);
         vkDestroyBuffer(device, indexBuffer , nullptr);
         vkDestroySampler(device ,textureSampler , nullptr);
@@ -1991,14 +2010,14 @@ void createInstance(){
         vkDestroyDescriptorSetLayout(device , descriptorSetLayout , nullptr);
         vkDestroyPipelineLayout(device , pipelineLayout, nullptr);
         vkDestroyRenderPass(device, renderPass, nullptr);
-        vkDestroySwapchainKHR(device, swapChain, nullptr);
+        /*vkDestroySwapchainKHR(device, swapChain, nullptr);
         vkDestroyDevice(device, nullptr);
         vkDestroyImageView(device , depthImageView , nullptr);
         vkFreeMemory(device , depthImageMemory , nullptr);
         vkDestroyImage(device , depthImage , nullptr);
         vkDestroyImageView(device, colorImageView,nullptr);
         vkDestroyImage(device, colorImage, nullptr);
-        vkFreeMemory (device,colorImageMemory, nullptr);
+        vkFreeMemory (device,colorImageMemory, nullptr);*/
         if (enableValidationLayers){
             DestroyDebugUtilsMessengerEXT(instance, debugMessenger, nullptr);
         }
