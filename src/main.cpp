@@ -236,18 +236,23 @@ class Application {
         }
         return shaderModule;
      }
+     static void framebufferResizeCallback(GLFWwindow* window, int width , int height){
+        auto app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
+        app->framebufferResized = true;
+     }
     void initWindow(){
         if (!glfwInit()) {
             throw std::runtime_error("Failed to initialize GLFW!");}
         //integrating GLFW
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_RESIZABLE,GLFW_FALSE);
+       // glfwWindowHint(GLFW_RESIZABLE,GLFW_FALSE); for resizing window
         window=glfwCreateWindow(WIDTH,HEIGHT,"Vulkan",nullptr,nullptr);
         if (!window) {
             glfwTerminate();
             throw std::runtime_error("Failed to create GLFW window!");
         }
-
+       glfwSetWindowUserPointer(window, this);
+       glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
     }
     VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling , VkFormatFeatureFlags features){
         for (VkFormat format : candidates){
@@ -760,7 +765,7 @@ void createRenderPass(){
         dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         
      // Bundle them up and create 
-      std::array<VkAttachmentDescription , 3> attachments = {colorAttachment , depthAttachment }; //  changed to 3 
+      std::array<VkAttachmentDescription , 3> attachments = {colorAttachment , depthAttachment,colorAttachmentResolve }; //  changed to 3 
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1748,7 +1753,8 @@ void updateUniformBuffer(uint32_t currentImage){
     //vkAcquireNextImageKHR(device, swapChain , UINT64_MAX, imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
     VkResult result = vkAcquireNextImageKHR(device,swapChain , UINT64_MAX,imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
 
-    if (result == VK_ERROR_OUT_OF_DATE_KHR){
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result== VK_SUBOPTIMAL_KHR||framebufferResized){
+        framebufferResized = false;
         recreateSwapChain();
         return;
     }
